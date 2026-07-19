@@ -1,0 +1,1592 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>コトバノカオス - ランダム文章ジェネレータ</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Font Awesome (アイコン用) -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=DotGothic16&family=Yusei+Magic&family=Noto+Sans+JP:wght@400;700&display=swap');
+        
+        body {
+            font-family: 'Noto Sans JP', sans-serif;
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            min-height: 100vh;
+        }
+
+        .font-funny {
+            font-family: 'Yusei Magic', 'DotGothic16', sans-serif;
+        }
+
+        /* ドラッグ中のスタイル */
+        .dragging {
+            opacity: 0.5;
+            transform: scale(0.98);
+            border-style: dashed;
+        }
+
+        /* カスタムスクロールバー */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+    </style>
+</head>
+<body class="py-6 px-4 sm:px-6 lg:px-8 relative">
+
+    <div class="max-w-4xl mx-auto">
+        <!-- ヘッダー (スマホ時は縦並び、PC時は横並びにすることで重なりを絶対防止) -->
+        <header class="flex flex-col md:flex-row justify-between items-center gap-4 mb-8 pb-6 border-b border-slate-200/50">
+            <div class="text-center md:text-left">
+                <h1 class="text-4xl sm:text-5xl font-extrabold text-slate-800 font-funny mb-2 tracking-wider flex justify-center md:justify-start items-center gap-3">
+                    <i class="fa-solid fa-dice text-indigo-600 animate-bounce"></i>
+                    コトバノカオス
+                </h1>
+                <p class="text-slate-600 text-sm sm:text-base">パーツの順番を決めて、シュールでヘンテコな文章を自動生成しよう！</p>
+            </div>
+            
+            <!-- アクションボタン群 (折り返しても崩れない flex-wrap 配置) -->
+            <div class="flex flex-wrap justify-center md:justify-end gap-2 w-full md:w-auto shrink-0">
+                <!-- 効果音ON/OFFスイッチ -->
+                <button id="soundToggleBtn" onclick="toggleSound()" class="px-3 py-2 bg-white hover:bg-slate-50 text-indigo-600 rounded-full text-xs font-bold shadow-md transition-all border border-indigo-100 flex items-center gap-1" title="効果音を切り替え">
+                    <i id="soundIcon" class="fa-solid fa-volume-high text-indigo-500"></i>
+                    音 ON
+                </button>
+                <!-- JSON入出力ボタン -->
+                <button onclick="openJsonModal(); playSystemSound('click');" class="px-3 py-2 bg-white hover:bg-slate-50 text-emerald-600 rounded-full text-xs font-bold shadow-md transition-all border border-emerald-100 flex items-center gap-1" title="辞書(JSON)のインポート/エクスポート">
+                    <i class="fa-solid fa-file-code text-emerald-500"></i>
+                    辞書入出力 📂
+                </button>
+                <button onclick="openHelpModal(); playSystemSound('click');" class="px-4 py-2 bg-white hover:bg-slate-50 text-indigo-600 rounded-full text-xs font-bold shadow-md transition-all border border-indigo-100 flex items-center gap-1">
+                    <i class="fa-regular fa-lightbulb text-amber-500 animate-pulse"></i>
+                    使い方 💡
+                </button>
+            </div>
+        </header>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            
+            <!-- 左側設定エリア (2カラム分) -->
+            <div class="lg:col-span-2 space-y-6">
+                
+                <!-- 1. 文章の組み立て順序（スロット設定） -->
+                <div class="bg-white rounded-2xl p-6 shadow-xl border border-slate-100">
+                    <div class="flex flex-col sm:flex-row justify-between sm:items-center gap-2 mb-4">
+                        <h2 class="text-lg font-bold text-slate-800 flex items-center gap-2">
+                            <i class="fa-solid fa-bars-staggered text-indigo-500"></i>
+                            1. 文章の組み立て順序
+                        </h2>
+                        <span class="text-xs text-slate-400 bg-slate-50 px-2 py-1 rounded-md">
+                            <i class="fa-solid fa-hand-pointer text-indigo-400"></i> ドラッグして自由に並び替えOK！
+                        </span>
+                    </div>
+
+                    <!-- スロット配置リスト -->
+                    <div id="slotsContainer" class="space-y-2 mb-4">
+                        <!-- 動的生成エリア -->
+                    </div>
+
+                    <!-- スロット追加エリア -->
+                    <div class="space-y-3">
+                        <span class="text-xs font-bold text-slate-400 block">パーツを順番に追加：</span>
+                        <div id="slotAddButtons" class="flex flex-wrap gap-2">
+                            <!-- JSで基本カテゴリ＋カスタムカテゴリの追加ボタンを描画 -->
+                        </div>
+                        
+                        <!-- オリジナルカテゴリ作成フォーム -->
+                        <div class="pt-2 border-t border-dashed border-slate-100 flex flex-col sm:flex-row gap-2 items-center">
+                            <span class="text-xs font-bold text-indigo-600 shrink-0"><i class="fa-solid fa-wand-magic"></i> オリジナルの種類を作る：</span>
+                            <div class="flex gap-1 w-full sm:w-auto flex-1">
+                                <input type="text" id="newCategoryInput" placeholder="例：必殺技、食べ物..." class="flex-1 px-3 py-1.5 border border-indigo-100 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-700">
+                                <button onclick="createNewCategory()" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all shrink-0">
+                                    作成
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 2. ジェネレーターメイン操作 & 結果表示 -->
+                <div class="bg-slate-900 text-white rounded-3xl p-6 sm:p-8 shadow-2xl relative overflow-hidden border-4 border-slate-800">
+                    <div class="absolute -right-16 -top-16 w-36 h-36 bg-indigo-500 rounded-full opacity-10 blur-2xl"></div>
+                    <div class="absolute -left-16 -bottom-16 w-36 h-36 bg-pink-500 rounded-full opacity-10 blur-2xl"></div>
+
+                    <div class="relative z-10 flex flex-col items-center">
+                        <div class="w-full text-center mb-6">
+                            <span class="px-3 py-1 bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 rounded-full text-xs font-semibold uppercase tracking-wider">
+                                GENERATOR
+                            </span>
+                        </div>
+
+                        <!-- 結果表示パネル -->
+                        <div class="w-full bg-slate-950/60 rounded-2xl p-6 min-h-[120px] flex items-center justify-center border border-slate-800 mb-6 relative group">
+                            <p id="resultText" class="text-xl sm:text-2xl font-bold font-funny text-center leading-relaxed tracking-wide text-indigo-100">
+                                上の「文章を生成する」ボタンを押してね！
+                            </p>
+                            <!-- コピー・お気に入りボタン -->
+                            <div id="resultActions" class="absolute right-3 bottom-3 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                                <button onclick="copyResult(); playSystemSound('click');" title="クリップボードにコピー" class="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs transition-all">
+                                    <i class="fa-regular fa-copy"></i>
+                                </button>
+                                <button onclick="saveToFavorites()" title="お気に入りに保存" class="p-2 bg-slate-800 hover:bg-slate-700 text-rose-400 rounded-lg text-xs transition-all">
+                                    <i class="fa-regular fa-heart" id="favHeartIcon"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- メインボタン群 -->
+                        <div class="flex flex-col sm:flex-row gap-3 w-full">
+                            <button onclick="generateSentence()" class="flex-1 py-4 px-6 bg-gradient-to-r from-indigo-500 to-pink-500 hover:from-indigo-600 hover:to-pink-600 active:scale-95 text-white font-extrabold rounded-2xl text-lg shadow-lg shadow-indigo-500/30 transition-all flex items-center justify-center gap-2">
+                                <i class="fa-solid fa-wand-magic-sparkles"></i>
+                                文章を生成する！
+                            </button>
+                            <button onclick="speakSentence()" id="speakBtn" class="py-4 px-6 bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 font-bold rounded-2xl transition-all flex items-center justify-center gap-2" title="音声で読み上げ">
+                                <i class="fa-solid fa-volume-high"></i>
+                                <span class="hidden sm:inline">読み上げる</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- プリセット選択 -->
+                <div class="bg-white rounded-2xl p-6 shadow-xl border border-slate-100">
+                    <h3 class="text-sm font-bold text-slate-400 mb-3 tracking-wider uppercase">おもしろプリセット設定</h3>
+                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                        <button onclick="loadPreset('standard')" class="p-3 bg-slate-50 hover:bg-indigo-50 hover:text-indigo-600 rounded-xl text-xs font-bold text-slate-700 border border-slate-100 hover:border-indigo-200 transition-all text-center">
+                            <span class="block text-lg mb-1">🍙</span>
+                            日常のシュール
+                        </button>
+                        <button onclick="loadPreset('sf')" class="p-3 bg-slate-50 hover:bg-indigo-50 hover:text-indigo-600 rounded-xl text-xs font-bold text-slate-700 border border-slate-100 hover:border-indigo-200 transition-all text-center">
+                            <span class="block text-lg mb-1">🚀</span>
+                            SF・宇宙SF
+                        </button>
+                        <button onclick="loadPreset('fantasy')" class="p-3 bg-slate-50 hover:bg-indigo-50 hover:text-indigo-600 rounded-xl text-xs font-bold text-slate-700 border border-slate-100 hover:border-indigo-200 transition-all text-center">
+                            <span class="block text-lg mb-1">🐉</span>
+                            異世界ファンタジー
+                        </button>
+                        <button onclick="loadPreset('love')" class="p-3 bg-slate-50 hover:bg-indigo-50 hover:text-indigo-600 rounded-xl text-xs font-bold text-slate-700 border border-slate-100 hover:border-indigo-200 transition-all text-center">
+                            <span class="block text-lg mb-1">💕</span>
+                            胸キュン学園
+                        </button>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- 右側：単語プール管理 & お気に入り -->
+            <div class="space-y-6">
+                
+                <!-- 単語プール管理 -->
+                <div class="bg-white rounded-2xl p-6 shadow-xl border border-slate-100 flex flex-col max-h-[550px]">
+                    <div class="flex justify-between items-center mb-3 shrink-0">
+                        <h2 class="text-lg font-bold text-slate-800 flex items-center gap-2">
+                            <i class="fa-solid fa-book-bookmark text-pink-500"></i>
+                            単語プール編集
+                        </h2>
+                        <!-- 初期化・リセットボタン -->
+                        <button onclick="confirmReset()" class="text-xs text-slate-400 hover:text-rose-500 transition-all flex items-center gap-1" title="最初の設定にリセットする">
+                            <i class="fa-solid fa-arrow-rotate-left"></i>
+                            リセット
+                        </button>
+                    </div>
+
+                    <!-- リセット確認用簡易インライン -->
+                    <div id="resetConfirmArea" class="hidden bg-rose-50 border border-rose-100 p-2 rounded-xl mb-3 text-xs text-slate-600 shrink-0">
+                        <p class="font-bold text-rose-800 mb-1">全ての設定と作成したグループを初期状態に戻しますか？</p>
+                        <div class="flex justify-end gap-2">
+                            <button onclick="cancelReset(); playSystemSound('click');" class="px-2 py-1 bg-white border border-slate-200 rounded text-[10px]">いいえ</button>
+                            <button onclick="resetToDefaultPool()" class="px-2 py-1 bg-rose-600 text-white rounded text-[10px] font-bold">リセットする</button>
+                        </div>
+                    </div>
+
+                    <!-- カテゴリ切り替えタブ -->
+                    <div class="flex gap-1 overflow-x-auto pb-2 mb-3 shrink-0" id="tabsContainer">
+                        <!-- タブボタンはJSで自動生成されます -->
+                    </div>
+
+                    <!-- 単語入力フォーム -->
+                    <div class="flex gap-2 mb-3 shrink-0">
+                        <input type="text" id="newWordInput" placeholder="新しい単語を入力..." class="flex-1 px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-700">
+                        <button onclick="addNewWord()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-bold transition-all shrink-0">
+                            追加
+                        </button>
+                    </div>
+
+                    <!-- 単語リスト -->
+                    <div id="wordListContainer" class="flex-1 overflow-y-auto space-y-1.5 pr-1 min-h-[150px]">
+                        <!-- 動的に単語リストが並びます -->
+                    </div>
+                </div>
+
+                <!-- お気に入り & 履歴リスト -->
+                <div class="bg-white rounded-2xl p-6 shadow-xl border border-slate-100">
+                    <div class="flex justify-between items-center mb-4">
+                        <h2 class="text-lg font-bold text-slate-800 flex items-center gap-2">
+                            <i class="fa-solid fa-heart text-rose-500"></i>
+                            お気に入り保存
+                        </h2>
+                        <button onclick="confirmClearFavorites()" class="text-xs text-slate-400 hover:text-red-500 transition-all">すべて消去</button>
+                    </div>
+
+                    <!-- クリア確認用簡易インライン -->
+                    <div id="clearFavsConfirmArea" class="hidden bg-rose-50 border border-rose-100 p-2 rounded-xl mb-3 text-xs text-slate-600">
+                        <p class="font-bold text-rose-800 mb-1">お気に入りをすべて削除しますか？</p>
+                        <div class="flex justify-end gap-2">
+                            <button onclick="cancelClearFavorites(); playSystemSound('click');" class="px-2 py-1 bg-white border border-slate-200 rounded text-[10px]">いいえ</button>
+                            <button onclick="clearFavorites()" class="px-2 py-1 bg-rose-600 text-white rounded text-[10px] font-bold">削除する</button>
+                        </div>
+                    </div>
+
+                    <!-- お気に入りリスト -->
+                    <div id="favoritesList" class="space-y-2 max-h-[250px] overflow-y-auto pr-1">
+                        <!-- 動的生成 -->
+                        <p class="text-xs text-slate-400 text-center py-4">お気に入りの文章はまだありません。生成して右下のハートマークを押そう！</p>
+                    </div>
+                </div>
+
+            </div>
+
+        </div>
+
+        <!-- フッター -->
+        <footer class="mt-12 text-center text-slate-400 text-xs flex flex-col items-center gap-1">
+            <p>&copy; 2026 コトバノカオス - ランダム文章ジェネレータ</p>
+            <p class="text-[10px] text-slate-400 flex items-center gap-1">
+                <i class="fa-solid fa-cloud-arrow-up text-indigo-400"></i> すべての設定はブラウザに自動保存されています
+            </p>
+        </footer>
+    </div>
+
+    <!-- 使い方ヘルプモーダル -->
+    <div id="helpModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden transition-all duration-300 opacity-0">
+        <div class="bg-white rounded-3xl max-w-lg w-full shadow-2xl overflow-hidden transform scale-95 transition-transform duration-300 flex flex-col max-h-[90vh]">
+            <!-- モーダルヘッダー -->
+            <div class="p-6 bg-gradient-to-r from-indigo-500 to-indigo-600 text-white flex justify-between items-center shrink-0">
+                <h3 class="text-xl font-bold font-funny flex items-center gap-2">
+                    <i class="fa-regular fa-circle-question"></i>
+                    コトバノカオスの遊び方
+                </h3>
+                <button onclick="closeHelpModal(); playSystemSound('click');" class="text-white hover:text-indigo-200 transition-all text-xl">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+            <!-- モーダルボディ (スクロールエリア) -->
+            <div class="p-6 overflow-y-auto space-y-6 text-slate-600 text-sm leading-relaxed">
+                <div>
+                    <h4 class="font-bold text-slate-800 flex items-center gap-1.5 mb-1 text-base">
+                        <span class="text-indigo-500">❶</span>
+                        パーツの順序をカスタマイズ！
+                    </h4>
+                    <p>「文章の組み立て順序」にある各パーツは、**マウスのドラッグ＆ドロップ**で自由に順序を変更できます。スマホやタブレットをご利用の方は、右側の **上下矢印（▲/▼）ボタン** で並び替えができます。</p>
+                </div>
+                <div>
+                    <h4 class="font-bold text-slate-800 flex items-center gap-1.5 mb-1 text-base">
+                        <span class="text-indigo-500">❷</span>
+                        オリジナルグループの作成！
+                    </h4>
+                    <p>「1. 文章の組み立て順序」の下部にある **「オリジナルの種類を作る」** フォームから、好きな言葉のグループ（例：場所、必殺技、食べ物など）を新しく何個でも作ることができます！作成するとスロットや単語プールに自動で追加されます。</p>
+                </div>
+                <div>
+                    <h4 class="font-bold text-slate-800 flex items-center gap-1.5 mb-1 text-base">
+                        <span class="text-indigo-500">❸</span>
+                        単語プールを自分好みに編集！
+                    </h4>
+                    <p>右側の「単語プール編集」で、新しく追加した「効果音」や「名詞の修飾語」を含む各タブを切り替えて好きな言葉を自由に追加・削除できます。「おもしろプリセット設定」を使えば、日常系・SF・ファンタジー・学園モノなど、テーマに沿った単語を一括で呼び出すことも可能です。</p>
+                </div>
+                <div>
+                    <h4 class="font-bold text-slate-800 flex items-center gap-1.5 mb-1 text-base">
+                        <span class="text-indigo-500">❹</span>
+                        お気に入りを保存＆読み上げ！
+                    </h4>
+                    <p>「文章を生成する！」を押すと、設定した順番通りに単語がランダムに組み合わさってヘンテコな文章が誕生します。気に入った文章は **お気に入り（ハートマーク）** に保存したり、スピーカーボタンで **愉快に音声読み上げ** させてみましょう！</p>
+                </div>
+                <div class="bg-indigo-50 p-4 rounded-2xl border border-indigo-100 flex gap-3">
+                    <span class="text-2xl">💾</span>
+                    <div>
+                        <h5 class="font-bold text-indigo-900 mb-0.5">セーブ機能について</h5>
+                        <p class="text-xs text-indigo-800">あなたが追加した言葉、作ったオリジナルグループ、パーツの順番は、**すべて自動でブラウザに保存**されます。いつでも続きから遊べます！</p>
+                    </div>
+                </div>
+            </div>
+            <!-- モーダルフッター -->
+            <div class="p-4 bg-slate-50 border-t border-slate-100 text-center shrink-0">
+                <button onclick="closeHelpModal(); playSystemSound('click');" class="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs shadow-md transition-all">
+                    わかった、遊んでみる！
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 辞書インポート・エクスポート用 JSONモーダル -->
+    <div id="jsonModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden transition-all duration-300 opacity-0">
+        <div class="bg-white rounded-3xl max-w-xl w-full shadow-2xl overflow-hidden transform scale-95 transition-transform duration-300 flex flex-col max-h-[90vh]">
+            <!-- モーダルヘッダー -->
+            <div class="p-6 bg-gradient-to-r from-emerald-500 to-teal-600 text-white flex justify-between items-center shrink-0">
+                <h3 class="text-xl font-bold font-funny flex items-center gap-2">
+                    <i class="fa-solid fa-file-code"></i>
+                    辞書(JSON)の入出力
+                </h3>
+                <button onclick="closeJsonModal(); playSystemSound('click');" class="text-white hover:text-emerald-100 transition-all text-xl">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+            <!-- モーダルボディ -->
+            <div class="p-6 overflow-y-auto space-y-4 text-slate-600 text-sm">
+                <p class="text-slate-500 text-xs leading-relaxed">
+                    カオスの言葉のデータをJSON形式でバックアップ・復元できます。他の人に共有したり、自分で保存したファイルを読み込ませて遊ぼう！
+                </p>
+
+                <!-- タブコンテンツ: JSONテキストエリア -->
+                <div class="space-y-2">
+                    <div class="flex justify-between items-center">
+                        <label class="block font-bold text-slate-700 text-xs">JSONデータテキスト</label>
+                        <div class="flex gap-2">
+                            <button onclick="copyJsonToClipboard();" class="text-[11px] text-emerald-600 hover:text-emerald-700 font-bold flex items-center gap-1">
+                                <i class="fa-regular fa-copy"></i> コピーする
+                            </button>
+                            <button onclick="downloadJsonFile();" class="text-[11px] text-indigo-600 hover:text-indigo-700 font-bold flex items-center gap-1">
+                                <i class="fa-solid fa-download"></i> ファイル保存
+                            </button>
+                        </div>
+                    </div>
+                    <textarea id="jsonTextArea" rows="6" class="w-full p-3 font-mono text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-slate-700" placeholder='ここにJSONを貼り付けてインポートできます...'></textarea>
+                </div>
+
+                <!-- ファイルドラッグ＆ドロップ兼インプット -->
+                <div class="border-2 border-dashed border-slate-200 hover:border-emerald-300 rounded-2xl p-4 text-center cursor-pointer transition-all bg-slate-50 hover:bg-emerald-50/20 relative" id="dragDropArea">
+                    <input type="file" id="jsonFileInput" accept=".json" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer" onchange="handleJsonFileSelect(event)">
+                    <i class="fa-solid fa-cloud-arrow-up text-2xl text-slate-400 mb-1"></i>
+                    <p class="text-xs font-bold text-slate-600">JSONファイルをここにドラッグ＆ドロップ</p>
+                    <p class="text-[10px] text-slate-400 mt-0.5">またはクリックしてファイルを選択 (.json)</p>
+                </div>
+
+                <!-- インポート設定 -->
+                <div class="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                    <span class="block text-xs font-bold text-slate-700 mb-2">📥 インポート時の動作設定:</span>
+                    <div class="grid grid-cols-2 gap-4">
+                        <label class="flex items-center gap-2 p-2 bg-white rounded-xl border border-slate-200 cursor-pointer hover:border-emerald-500 transition-all">
+                            <input type="radio" name="importMode" value="merge" checked class="text-emerald-600 focus:ring-emerald-500">
+                            <div>
+                                <span class="block text-xs font-bold text-slate-700">追加 (マージ)</span>
+                                <span class="block text-[10px] text-slate-400">今の設定を残したまま増やす</span>
+                            </div>
+                        </label>
+                        <label class="flex items-center gap-2 p-2 bg-white rounded-xl border border-slate-200 cursor-pointer hover:border-rose-500 transition-all">
+                            <input type="radio" name="importMode" value="overwrite" class="text-rose-600 focus:ring-rose-500">
+                            <div>
+                                <span class="block text-xs font-bold text-rose-700">上書き (完全置換)</span>
+                                <span class="block text-[10px] text-slate-400">今の設定を消して置き換える</span>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+            </div>
+            <!-- モーダルフッター -->
+            <div class="p-4 bg-slate-50 border-t border-slate-100 flex gap-2 justify-end shrink-0">
+                <button onclick="closeJsonModal(); playSystemSound('click');" class="px-4 py-2 bg-white hover:bg-slate-100 border border-slate-200 text-slate-600 font-bold rounded-xl text-xs transition-all">
+                    閉じる
+                </button>
+                <button onclick="importJsonFromTextArea();" class="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs shadow-md transition-all flex items-center gap-1.5">
+                    <i class="fa-solid fa-file-import"></i>
+                    インポート実行
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- カスタム通知ポップアップ -->
+    <div id="toast" class="fixed bottom-5 left-1/2 transform -translate-x-1/2 bg-slate-900 text-white px-4 py-2 rounded-full text-xs shadow-lg transition-all duration-300 opacity-0 translate-y-4 pointer-events-none z-50 flex items-center gap-2">
+        <i id="toastIcon" class="fa-solid fa-circle-info"></i>
+        <span id="toastMessage">メッセージ</span>
+    </div>
+
+    <script>
+        // 単語定義データベース（初期プリセットテンプレート）
+        const wordPools = {
+            standard: {
+                conjunction: ["しかし、", "そして、", "ある日、", "なんと、", "あろうことか、", "一方、その頃", "突然、", "ふと気がつくと、", "そういえば、"],
+                modifier: ["伝説の", "もちもちの", "輝く", "少し眠そうな", "誰も知らない", "超次元の", "ピチピチな", "哀愁漂う"],
+                noun: ["お茶目な猫", "うちの担任", "もちもちのタピオカ", "元気なおじいさん", "最新の人工知能", "炙りサーモン寿司", "私のスマホ", "秘密結社", "推しチョコ", "お掃除ロボット"],
+                particle: ["が", "は", "を", "に", "と", "の隣で"],
+                adverb: ["全力で", "優雅に", "こっそりと", "宇宙規模で", "涙を流しながら", "ぬるぬると", "倍速で", "嬉しそうに"],
+                verb: ["踊り狂う", "バック転する", "パフェを食べる", "大気圏に突入する", "二度寝する", "即興ポエムを詠む", "お辞儀する", "テレポートする"],
+                sfx: ["＼デデン！／", "ゴゴゴゴゴ…", "キラキラ〜✨", "カシャッ！", "ズコーッ！", "ひらり、", "ドタバタ！", "シャキーン！"],
+                ending: ["のであった。", "らしい。", "に違いない！", "かもしれない。", "という夢を見た。", "のである。", "と、風が囁いた。"]
+            },
+            sf: {
+                conjunction: ["時空の彼方で、", "量子力学的には、", "西暦3026年、", "ブラックホール内部で、", "並行世界では、"],
+                modifier: ["サイバーな", "光り輝く", "未知の", "プログラムされた", "圧縮された", "未来から来た"],
+                noun: ["ピカピカのアンドロイド", "お助けナノマシン", "恒星間移民船", "ミニワームホール", "異次元 of メロンパン", "謎のダークマター", "サイバネティクスおばあちゃん"],
+                particle: ["が", "は", "の重力圏で", "を超越して"],
+                adverb: ["光速で", "量子もつれ状態で", "反重力的に", "サイバーパンク風に", "テレポートしながら"],
+                verb: ["ワープする", "再起動する", "通信エラーになる", "特異点を形成する", "次元上昇（アセンション）する"],
+                sfx: ["ピピピッ！", "フォォォン", "バババババ！", "ウィィィン…", "ピコーン！"],
+                ending: ["のであった（完）。", "というシステムエラーが生じた。", "とAIは記録している。", "はずだった。"]
+            },
+            fantasy: {
+                conjunction: ["精霊たちが囁く中、", "古の予言通り、", "魔力が満ちる夜、", "伝説の泉のほとりで、"],
+                modifier: ["選ばれし", "いにしえの", "呪われし", "光属性の", "勇猛果敢な", "ぷにぷにの"],
+                noun: ["見習い大魔導士", "ぷにぷにスライム", "お昼寝中のドラゴン", "選ばれし聖剣", "迷宮のタマネギ", "ギルドマスター", "のんびり勇者一行"],
+                particle: ["get", "は", "に魔力を込めて", "を召喚して"],
+                adverb: ["神々しく", "魔術的に", "一撃のもとに", "闇に紛れて", "メロディアスに"],
+                verb: ["封印を解く", "スーパー覚醒する", "クリティカルヒットする", "ただの石像になる", "握手を交わす"],
+                sfx: ["メラメラ！", "ピキーン！", "シュバッ！", "ゴゴゴゴ…", "キラキラ〜"],
+                ending: ["という伝説が残っている。", "、それが大冒険 of LIFE だった。", "のだ！（神の啓示）"]
+            },
+            love: {
+                conjunction: ["夕暮れ時の校舎裏で、", "放課後のチャイムが鳴り響く中、", "あの夏の日の思い出に、"],
+                modifier: ["ちょっぴりシャイな", "メガネをかけた", "憧れの", "高嶺の", "食パンをくわえた", "運命の"],
+                noun: ["謎の転校生", "お隣の幼馴染", "メガネをかけた先輩", "真面目な生徒会長", "食パンをくわえた少女", "転んってきた美少年"],
+                particle: ["get", "は", "を見つめて", "の肩をトントン叩いて"],
+                adverb: ["胸をキュンとさせながら", "照れながら", "ドラマチックに", "ツンツンしながら", "一途に"],
+                verb: ["告白する", "壁ドン（風）する", "走り去る", "すすり泣く", "手をギュッと握りしめる"],
+                sfx: ["ドキドキ…", "パチッ！", "ウルウル", "キャーーーッ！", "フワッ"],
+                ending: ["のでした（胸キュン）。", "、それが友情の始まりだった。", "と甘酸っぱく囁いた。"]
+            }
+        };
+
+        // デフォルトカテゴリメタ情報
+        const defaultCategoryMeta = {
+            conjunction: { name: "接続詞", bg: "bg-pink-500", text: "text-pink-700", border: "border-pink-200", lightBg: "bg-pink-50" },
+            modifier: { name: "修飾語", bg: "bg-orange-500", text: "text-orange-700", border: "border-orange-200", lightBg: "bg-orange-50" },
+            noun: { name: "名詞", bg: "bg-blue-500", text: "text-blue-700", border: "border-blue-200", lightBg: "bg-blue-50" },
+            particle: { name: "助詞", bg: "bg-purple-500", text: "text-purple-700", border: "border-purple-200", lightBg: "bg-purple-50" },
+            adverb: { name: "副詞", bg: "bg-amber-500", text: "text-amber-700", border: "border-amber-200", lightBg: "bg-amber-50" },
+            verb: { name: "動詞", bg: "bg-emerald-500", text: "text-emerald-700", border: "border-emerald-200", lightBg: "bg-emerald-50" },
+            sfx: { name: "効果音", bg: "bg-teal-500", text: "text-teal-700", border: "border-teal-200", lightBg: "bg-teal-50" },
+            ending: { name: "結び", bg: "bg-rose-500", text: "text-rose-700", border: "border-rose-200", lightBg: "bg-rose-50" }
+        };
+
+        // カスタムカテゴリ用のカラーパレット
+        const customColorPalettes = [
+            { bg: "bg-indigo-500", text: "text-indigo-700", border: "border-indigo-200", lightBg: "bg-indigo-50" },
+            { bg: "bg-sky-500", text: "text-sky-700", border: "border-sky-200", lightBg: "bg-sky-50" },
+            { bg: "bg-violet-500", text: "text-violet-700", border: "border-violet-200", lightBg: "bg-violet-50" },
+            { bg: "bg-lime-500", text: "text-lime-700", border: "border-lime-200", lightBg: "bg-lime-50" },
+            { bg: "bg-cyan-500", text: "text-cyan-700", border: "border-cyan-200", lightBg: "bg-cyan-50" }
+        ];
+
+        // アプリの状態
+        let currentPool; // カスタム対応 of 単語プール
+        let activeCategory = "conjunction"; // 編集中のアクティブカテゴリ
+        let sequence; // 文章構造の順序
+        let generatedSentenceText = "";
+        let favorites = [];
+        let dragSrcIndex = null; // ドラッグ開始時のインデックス
+        let isSoundOn = true; // 効果音ON/OFFフラグ
+        let audioCtx = null; // Web Audio APIのコンテキスト
+
+        // ユーザーが作成したオリジナルカテゴリ情報
+        let customCategories = {}; 
+
+        // 初期ロード
+        window.onload = function() {
+            // ローカルからサウンド設定の復元
+            const storedSound = localStorage.getItem("sentence_generator_sound");
+            if (storedSound !== null) {
+                isSoundOn = storedSound === "true";
+            }
+            updateSoundButtonUI();
+
+            loadAllData();
+            
+            renderSlots();
+            renderSlotAddButtons();
+            renderTabs();
+            renderWords();
+            renderFavorites();
+            setupDragAndDropArea();
+        };
+
+        // --- 効果音システム (Web Audio API) ---
+        function initAudio() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+        }
+
+        function playSystemSound(type) {
+            if (!isSoundOn) return;
+            
+            try {
+                initAudio();
+                
+                const now = audioCtx.currentTime;
+
+                switch (type) {
+                    case 'click': // 「ピッ」という軽快な操作音
+                        {
+                            const osc = audioCtx.createOscillator();
+                            const gain = audioCtx.createGain();
+                            osc.type = 'sine';
+                            osc.frequency.setValueAtTime(800, now);
+                            osc.frequency.exponentialRampToValueAtTime(1200, now + 0.08);
+                            
+                            gain.gain.setValueAtTime(0.08, now);
+                            gain.gain.exponentialRampToValueAtTime(0.01, now + 0.08);
+                            
+                            osc.connect(gain);
+                            gain.connect(audioCtx.destination);
+                            osc.start(now);
+                            osc.stop(now + 0.08);
+                        }
+                        break;
+                    
+                    case 'success': // 「ピコピコーン！」という成功音
+                        {
+                            const notes = [523.25, 659.25, 783.99, 1046.50]; // ド、ミ、ソ、ド
+                            notes.forEach((freq, i) => {
+                                const osc = audioCtx.createOscillator();
+                                const gain = audioCtx.createGain();
+                                osc.type = 'triangle';
+                                osc.frequency.setValueAtTime(freq, now + i * 0.06);
+                                
+                                gain.gain.setValueAtTime(0.06, now + i * 0.06);
+                                gain.gain.exponentialRampToValueAtTime(0.01, now + i * 0.06 + 0.15);
+                                
+                                osc.connect(gain);
+                                gain.connect(audioCtx.destination);
+                                osc.start(now + i * 0.06);
+                                osc.stop(now + i * 0.06 + 0.15);
+                            });
+                        }
+                        break;
+
+                    case 'favorite': // 「キラーン✨」というキラキラ高音
+                        {
+                            const osc1 = audioCtx.createOscillator();
+                            const osc2 = audioCtx.createOscillator();
+                            const gain = audioCtx.createGain();
+                            
+                            osc1.type = 'sine';
+                            osc1.frequency.setValueAtTime(1500, now);
+                            osc1.frequency.linearRampToValueAtTime(3000, now + 0.3);
+                            
+                            osc2.type = 'triangle';
+                            osc2.frequency.setValueAtTime(1520, now);
+                            osc2.frequency.linearRampToValueAtTime(3020, now + 0.3);
+
+                            gain.gain.setValueAtTime(0.04, now);
+                            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+                            
+                            osc1.connect(gain);
+                            osc2.connect(gain);
+                            gain.connect(audioCtx.destination);
+                            
+                            osc1.start(now);
+                            osc2.start(now);
+                            osc1.stop(now + 0.3);
+                            osc2.stop(now + 0.3);
+                        }
+                        break;
+
+                    case 'generate': // 「テッテレー！」という楽しいファンファーレ音
+                        {
+                            const baseTime = now;
+                            // ソ -> ド -> ミ -> ソ(高)
+                            const melody = [
+                                { f: 392.00, d: 0.1 },  // ソ
+                                { f: 523.25, d: 0.1 },  // ド
+                                { f: 659.25, d: 0.1 },  // ミ
+                                { f: 783.99, d: 0.3 }   // ソ
+                            ];
+                            
+                            melody.forEach((note, i) => {
+                                const osc = audioCtx.createOscillator();
+                                const gain = audioCtx.createGain();
+                                osc.type = 'sine';
+                                osc.frequency.setValueAtTime(note.f, baseTime + i * 0.1);
+                                
+                                gain.gain.setValueAtTime(0.07, baseTime + i * 0.1);
+                                gain.gain.exponentialRampToValueAtTime(0.01, baseTime + i * 0.1 + note.d);
+                                
+                                osc.connect(gain);
+                                gain.connect(audioCtx.destination);
+                                osc.start(baseTime + i * 0.1);
+                                osc.stop(baseTime + i * 0.1 + note.d);
+                            });
+                        }
+                        break;
+
+                    case 'slide': // ドラッグやスライド時の「シュッ」という音
+                        {
+                            // ノイズシミュレーション
+                            const bufferSize = audioCtx.sampleRate * 0.1; // 0.1秒
+                            const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+                            const data = buffer.getChannelData(0);
+                            for (let i = 0; i < bufferSize; i++) {
+                                data[i] = Math.random() * 2 - 1;
+                            }
+                            
+                            const noiseNode = audioCtx.createBufferSource();
+                            noiseNode.buffer = buffer;
+                            
+                            const filter = audioCtx.createBiquadFilter();
+                            filter.type = 'bandpass';
+                            filter.frequency.setValueAtTime(1000, now);
+                            filter.frequency.exponentialRampToValueAtTime(4000, now + 0.1);
+                            
+                            const gain = audioCtx.createGain();
+                            gain.gain.setValueAtTime(0.05, now);
+                            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+                            
+                            noiseNode.connect(filter);
+                            filter.connect(gain);
+                            gain.connect(audioCtx.destination);
+                            
+                            noiseNode.start(now);
+                            noiseNode.stop(now + 0.1);
+                        }
+                        break;
+
+                    case 'error': // 「ブブー」というエラー・不合格音
+                        {
+                            const osc1 = audioCtx.createOscillator();
+                            const osc2 = audioCtx.createOscillator();
+                            const gain = audioCtx.createGain();
+                            
+                            osc1.type = 'sawtooth';
+                            osc1.frequency.setValueAtTime(150, now);
+                            osc2.type = 'sawtooth';
+                            osc2.frequency.setValueAtTime(153, now); // 少しデチューンさせて唸らせる
+                            
+                            gain.gain.setValueAtTime(0.08, now);
+                            gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+                            
+                            osc1.connect(gain);
+                            osc2.connect(gain);
+                            gain.connect(audioCtx.destination);
+                            
+                            osc1.start(now);
+                            osc2.start(now);
+                            osc1.stop(now + 0.3);
+                            osc2.stop(now + 0.3);
+                        }
+                        break;
+                }
+            } catch (err) {
+                console.log("オーディオ再生エラー:", err);
+            }
+        }
+
+        // 効果音オンオフ切り替え
+        function toggleSound() {
+            isSoundOn = !isSoundOn;
+            localStorage.setItem("sentence_generator_sound", isSoundOn);
+            updateSoundButtonUI();
+            if (isSoundOn) {
+                playSystemSound('click');
+            }
+        }
+
+        function updateSoundButtonUI() {
+            const btn = document.getElementById("soundToggleBtn");
+            const icon = document.getElementById("soundIcon");
+            if (isSoundOn) {
+                btn.className = "px-3 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 rounded-full text-xs font-bold shadow-md transition-all border border-indigo-200 flex items-center gap-1";
+                icon.className = "fa-solid fa-volume-high text-indigo-500";
+                btn.innerHTML = `<i id="soundIcon" class="fa-solid fa-volume-high text-indigo-500"></i> 音 ON`;
+            } else {
+                btn.className = "px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-500 rounded-full text-xs font-bold shadow-md transition-all border border-slate-200 flex items-center gap-1";
+                icon.className = "fa-solid fa-volume-xmark text-slate-400";
+                btn.innerHTML = `<i id="soundIcon" class="fa-solid fa-volume-xmark text-slate-400"></i> 音 OFF`;
+            }
+        }
+
+        // --- カテゴリ取得ヘルパー ---
+        function getCategoryMeta(key) {
+            if (defaultCategoryMeta[key]) {
+                return defaultCategoryMeta[key];
+            }
+            if (customCategories[key]) {
+                return customCategories[key];
+            }
+            return { name: key, bg: "bg-slate-500", text: "text-slate-700", border: "border-slate-200", lightBg: "bg-slate-50" };
+        }
+
+        // --- セーブ＆ロード制御 ---
+        function saveAllData() {
+            try {
+                localStorage.setItem("sentence_generator_pool", JSON.stringify(currentPool));
+                localStorage.setItem("sentence_generator_sequence", JSON.stringify(sequence));
+                localStorage.setItem("sentence_generator_favs", JSON.stringify(favorites));
+                localStorage.setItem("sentence_generator_custom_cats", JSON.stringify(customCategories));
+            } catch (e) {
+                console.error("データのセーブに失敗しました:", e);
+            }
+        }
+
+        // データの読込
+        function loadAllData() {
+            const storedCustomCats = localStorage.getItem("sentence_generator_custom_cats");
+            if (storedCustomCats) {
+                customCategories = JSON.parse(storedCustomCats);
+            } else {
+                customCategories = {};
+            }
+
+            const storedPool = localStorage.getItem("sentence_generator_pool");
+            if (storedPool) {
+                currentPool = JSON.parse(storedPool);
+            } else {
+                currentPool = JSON.parse(JSON.stringify(wordPools.standard));
+            }
+
+            const storedSeq = localStorage.getItem("sentence_generator_sequence");
+            if (storedSeq) {
+                sequence = JSON.parse(storedSeq);
+            } else {
+                sequence = ["conjunction", "modifier", "noun", "particle", "adverb", "sfx", "verb", "ending"];
+            }
+
+            const storedFavs = localStorage.getItem("sentence_generator_favs");
+            if (storedFavs) {
+                favorites = JSON.parse(storedFavs);
+            } else {
+                favorites = [];
+            }
+        }
+
+        // インラインでのリセット確認の表示
+        function confirmReset() {
+            playSystemSound('click');
+            document.getElementById("resetConfirmArea").classList.remove("hidden");
+        }
+
+        function cancelReset() {
+            document.getElementById("resetConfirmArea").classList.add("hidden");
+        }
+
+        function resetToDefaultPool() {
+            playSystemSound('error');
+            document.getElementById("resetConfirmArea").classList.add("hidden");
+            currentPool = JSON.parse(JSON.stringify(wordPools.standard));
+            sequence = ["conjunction", "modifier", "noun", "particle", "adverb", "sfx", "verb", "ending"];
+            customCategories = {}; 
+            activeCategory = "conjunction";
+            
+            saveAllData();
+            renderSlots();
+            renderSlotAddButtons();
+            renderTabs();
+            renderWords();
+            showToast("最初の設定に戻しました！", "info");
+        }
+
+        // --- オリジナルカテゴリの作成 ---
+        function createNewCategory() {
+            const input = document.getElementById("newCategoryInput");
+            const catName = input.value.trim();
+
+            if (!catName) {
+                playSystemSound('error');
+                showToast("グループの名前を入力してください", "warning");
+                return;
+            }
+
+            const allNames = [
+                ...Object.values(defaultCategoryMeta).map(c => c.name),
+                ...Object.values(customCategories).map(c => c.name)
+            ];
+            if (allNames.includes(catName)) {
+                playSystemSound('error');
+                showToast("既に同じ名前のグループがあります", "warning");
+                return;
+            }
+
+            const catId = "custom_" + Date.now();
+            const colorPalette = customColorPalettes[Math.floor(Math.random() * customColorPalettes.length)];
+
+            customCategories[catId] = {
+                name: catName,
+                bg: colorPalette.bg,
+                text: colorPalette.text,
+                border: colorPalette.border,
+                lightBg: colorPalette.lightBg,
+                isCustom: true 
+            };
+
+            currentPool[catId] = [];
+
+            input.value = "";
+            saveAllData();
+            
+            playSystemSound('success');
+            renderSlotAddButtons();
+            renderTabs();
+            selectCategory(catId);
+            showToast(`オリジナルグループ「${catName}」を作りました！`, "success");
+        }
+
+        // カスタムカテゴリの削除
+        function deleteCustomCategory(catId) {
+            const catName = customCategories[catId]?.name || "グループ";
+            playSystemSound('error');
+            if (confirm(`本当に「${catName}」グループを消去しますか？\n（このグループに登録した単語も消えてしまいます）`)) {
+                
+                sequence = sequence.filter(id => id !== catId);
+                delete currentPool[catId];
+                delete customCategories[catId];
+
+                if (activeCategory === catId) {
+                    activeCategory = "conjunction";
+                }
+
+                saveAllData();
+                playSystemSound('click');
+                renderSlots();
+                renderSlotAddButtons();
+                renderTabs();
+                renderWords();
+                showToast(`「${catName}」グループを削除しました`, "info");
+            }
+        }
+
+        // --- スロット関連 (ドラッグ＆ドロップ) ---
+        function renderSlots() {
+            const container = document.getElementById("slotsContainer");
+            container.innerHTML = "";
+
+            if (sequence.length === 0) {
+                container.innerHTML = `<p class="text-sm text-slate-400 text-center py-4 bg-slate-50 rounded-xl border border-dashed border-slate-200">構成要素がありません。下のボタンから追加してください。</p>`;
+                return;
+            }
+
+            sequence.forEach((catKey, index) => {
+                const meta = getCategoryMeta(catKey);
+                const item = document.createElement("div");
+                
+                item.className = `flex items-center justify-between p-3 ${meta.lightBg} border ${meta.border} rounded-xl transition-all shadow-sm cursor-grab active:cursor-grabbing hover:shadow-md`;
+                item.setAttribute("draggable", "true");
+                item.setAttribute("data-index", index);
+
+                item.addEventListener("dragstart", handleDragStart);
+                item.addEventListener("dragover", handleDragOver);
+                item.addEventListener("drop", handleDrop);
+                item.addEventListener("dragend", handleDragEnd);
+
+                item.innerHTML = `
+                    <div class="flex items-center gap-2 pointer-events-none">
+                        <span class="cursor-move text-slate-400 mr-1">
+                            <i class="fa-solid fa-grip-vertical"></i>
+                        </span>
+                        <span class="w-6 h-6 rounded-full ${meta.bg} text-white text-xs font-bold flex items-center justify-center">${index + 1}</span>
+                        <span class="font-bold text-sm ${meta.text}">${meta.name}</span>
+                        <span class="text-[10px] text-slate-400">(${meta.isCustom ? 'オリジナル' : '基本'})</span>
+                    </div>
+                    <div class="flex items-center gap-1">
+                        <!-- 上移動 -->
+                        <button onclick="moveSlot(${index}, -1); playSystemSound('slide');" class="p-1 hover:bg-white rounded text-slate-400 hover:text-indigo-600 transition-all ${index === 0 ? 'opacity-30 pointer-events-none' : ''}" title="上に移動">
+                            <i class="fa-solid fa-chevron-up text-xs"></i>
+                        </button>
+                        <!-- 下移動 -->
+                        <button onclick="moveSlot(${index}, 1); playSystemSound('slide');" class="p-1 hover:bg-white rounded text-slate-400 hover:text-indigo-600 transition-all ${index === sequence.length - 1 ? 'opacity-30 pointer-events-none' : ''}" title="下に移動">
+                            <i class="fa-solid fa-chevron-down text-xs"></i>
+                        </button>
+                        <!-- 削除 -->
+                        <button onclick="removeSlot(${index}); playSystemSound('error');" class="p-1 hover:bg-white rounded text-slate-400 hover:text-red-500 transition-all ml-1" title="削除">
+                            <i class="fa-solid fa-trash-can text-xs"></i>
+                        </button>
+                    </div>
+                `;
+                container.appendChild(item);
+            });
+        }
+
+        // スロット追加ボタンを描画
+        function renderSlotAddButtons() {
+            const container = document.getElementById("slotAddButtons");
+            container.innerHTML = "";
+
+            // 基本カテゴリの追加ボタン
+            Object.keys(defaultCategoryMeta).forEach(key => {
+                const meta = defaultCategoryMeta[key];
+                const btn = document.createElement("button");
+                btn.onclick = () => { addSlot(key); playSystemSound('click'); };
+                btn.className = `flex-1 min-w-[100px] px-3 py-2 ${meta.lightBg} hover:opacity-85 ${meta.text} rounded-xl text-xs font-semibold transition-all border ${meta.border} flex items-center justify-center gap-1`;
+                btn.innerHTML = `<i class="fa-solid fa-plus"></i> ${meta.name}`;
+                container.appendChild(btn);
+            });
+
+            // カスタムカテゴリの追加ボタン
+            Object.keys(customCategories).forEach(key => {
+                const meta = customCategories[key];
+                const btn = document.createElement("button");
+                btn.onclick = () => { addSlot(key); playSystemSound('click'); };
+                btn.className = `flex-1 min-w-[100px] px-3 py-2 ${meta.lightBg} hover:opacity-85 ${meta.text} rounded-xl text-xs font-semibold transition-all border ${meta.border} flex items-center justify-center gap-1`;
+                btn.innerHTML = `<i class="fa-solid fa-plus"></i> ${meta.name}`;
+                container.appendChild(btn);
+            });
+        }
+
+        // --- ドラッグ＆ドロップ制御 ---
+        function handleDragStart(e) {
+            dragSrcIndex = parseInt(this.getAttribute("data-index"));
+            this.classList.add("dragging");
+            e.dataTransfer.effectAllowed = "move";
+            playSystemSound('click');
+        }
+
+        // スロット配置エリア内での並び替え用ドラッグオーバー
+        function handleDragOver(e) {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = "move";
+            return false;
+        }
+
+        function handleDrop(e) {
+            e.stopPropagation();
+            const targetIndex = parseInt(this.getAttribute("data-index"));
+
+            if (dragSrcIndex !== null && dragSrcIndex !== targetIndex) {
+                const draggedItem = sequence.splice(dragSrcIndex, 1)[0];
+                sequence.splice(targetIndex, 0, draggedItem);
+                
+                saveAllData();
+                renderSlots();
+                playSystemSound('slide');
+                showToast("パーツの順序を入れ替えました！", "success");
+            }
+            return false;
+        }
+
+        function handleDragEnd() {
+            this.classList.remove("dragging");
+            const slots = document.querySelectorAll("#slotsContainer > div");
+            slots.forEach(slot => slot.classList.remove("dragging"));
+            dragSrcIndex = null;
+        }
+
+        function addSlot(category) {
+            sequence.push(category);
+            saveAllData();
+            renderSlots();
+            showToast("新しいパーツを追加しました！", "success");
+        }
+
+        function removeSlot(index) {
+            sequence.splice(index, 1);
+            saveAllData();
+            renderSlots();
+        }
+
+        function moveSlot(index, direction) {
+            const targetIndex = index + direction;
+            if (targetIndex < 0 || targetIndex >= sequence.length) return;
+            
+            const temp = sequence[index];
+            sequence[index] = sequence[targetIndex];
+            sequence[targetIndex] = temp;
+            
+            saveAllData();
+            renderSlots();
+        }
+
+        // --- 単語プール編集関連 ---
+        function renderTabs() {
+            const container = document.getElementById("tabsContainer");
+            container.innerHTML = "";
+
+            // 基本カテゴリタブ
+            Object.keys(defaultCategoryMeta).forEach(key => {
+                const meta = defaultCategoryMeta[key];
+                const isActive = activeCategory === key;
+                const tab = document.createElement("button");
+                tab.onclick = () => { selectCategory(key); playSystemSound('click'); };
+                tab.className = `px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1 shrink-0 ${
+                    isActive 
+                    ? `bg-slate-800 text-white shadow-md` 
+                    : `bg-slate-100 text-slate-600 hover:bg-slate-200`
+                }`;
+                tab.innerHTML = `${meta.name} <span class="${isActive ? 'bg-indigo-600 text-white' : 'bg-slate-200 text-slate-700'} text-[10px] px-1.5 rounded-full">${currentPool[key]?.length || 0}</span>`;
+                container.appendChild(tab);
+            });
+
+            // カスタムカテゴリタブ
+            Object.keys(customCategories).forEach(key => {
+                const meta = customCategories[key];
+                const isActive = activeCategory === key;
+                const tab = document.createElement("button");
+                tab.onclick = () => { selectCategory(key); playSystemSound('click'); };
+                tab.className = `px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1 shrink-0 ${
+                    isActive 
+                    ? `bg-indigo-800 text-white shadow-md` 
+                    : `bg-indigo-50 text-indigo-800 hover:bg-indigo-100`
+                }`;
+                tab.innerHTML = `⭐ ${meta.name} <span class="${isActive ? 'bg-pink-600 text-white' : 'bg-indigo-200 text-indigo-800'} text-[10px] px-1.5 rounded-full">${currentPool[key]?.length || 0}</span>`;
+                container.appendChild(tab);
+            });
+        }
+
+        function selectCategory(category) {
+            activeCategory = category;
+            renderTabs();
+            renderWords();
+        }
+
+        function renderWords() {
+            const container = document.getElementById("wordListContainer");
+            container.innerHTML = "";
+
+            const words = currentPool[activeCategory] || [];
+            const meta = getCategoryMeta(activeCategory);
+
+            if (meta.isCustom) {
+                const deleteGroupBtn = document.createElement("button");
+                deleteGroupBtn.onclick = () => deleteCustomCategory(activeCategory);
+                deleteGroupBtn.className = "w-full mb-2 py-1 bg-rose-50 hover:bg-rose-100 border border-rose-100 hover:border-rose-200 text-rose-700 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1";
+                deleteGroupBtn.innerHTML = `<i class="fa-solid fa-trash-can"></i> この「${meta.name}」グループを丸ごと削除する`;
+                container.appendChild(deleteGroupBtn);
+            }
+
+            if (words.length === 0) {
+                const emptyMsg = document.createElement("p");
+                emptyMsg.className = "text-xs text-slate-400 text-center py-8";
+                emptyMsg.innerText = "単語が登録されていません。上のフォームから登録しましょう！";
+                container.appendChild(emptyMsg);
+                return;
+            }
+
+            words.forEach((word, index) => {
+                const item = document.createElement("div");
+                item.className = "flex items-center justify-between px-3 py-1.5 bg-slate-50 border border-slate-100 hover:border-slate-200 rounded-lg text-sm text-slate-700 transition-all";
+                item.innerHTML = `
+                    <span class="truncate pr-2 font-medium">${word}</span>
+                    <button onclick="deleteWord(${index}); playSystemSound('error');" class="text-slate-300 hover:text-red-500 transition-all">
+                        <i class="fa-solid fa-xmark text-xs"></i>
+                    </button>
+                `;
+                container.appendChild(item);
+            });
+        }
+
+        function addNewWord() {
+            const input = document.getElementById("newWordInput");
+            const word = input.value.trim();
+
+            if (!word) {
+                playSystemSound('error');
+                showToast("単語を入力してください", "warning");
+                return;
+            }
+
+            if (!currentPool[activeCategory]) {
+                currentPool[activeCategory] = [];
+            }
+
+            if (currentPool[activeCategory].includes(word)) {
+                playSystemSound('error');
+                showToast("既に登録されている単語です", "warning");
+                return;
+            }
+
+            currentPool[activeCategory].push(word);
+            input.value = "";
+            
+            saveAllData();
+            playSystemSound('success');
+            renderWords();
+            renderTabs();
+            showToast("単語を追加しました！", "success");
+        }
+
+        function deleteWord(index) {
+            currentPool[activeCategory].splice(index, 1);
+            
+            saveAllData();
+            renderWords();
+            renderTabs();
+        }
+
+        // --- プリセット切り替え ---
+        function loadPreset(presetName) {
+            if (wordPools[presetName]) {
+                currentPool = JSON.parse(JSON.stringify(wordPools[presetName]));
+                sequence = ["conjunction", "modifier", "noun", "particle", "adverb", "sfx", "verb", "ending"];
+                customCategories = {}; 
+                activeCategory = "conjunction";
+
+                saveAllData();
+                playSystemSound('success');
+                renderSlots();
+                renderSlotAddButtons();
+                renderTabs();
+                renderWords();
+                showToast(`プリセットをロードしました！`, "success");
+            }
+        }
+
+        // --- 文章生成ロジック ---
+        function generateSentence() {
+            if (sequence.length === 0) {
+                playSystemSound('error');
+                showToast("文章の順番(パーツ)を1つ以上設定してください", "error");
+                return;
+            }
+
+            let sentenceParts = [];
+            let missingCategories = [];
+
+            sequence.forEach(catKey => {
+                const pool = currentPool[catKey] || [];
+                if (pool.length === 0) {
+                    missingCategories.push(getCategoryMeta(catKey).name);
+                } else {
+                    const randomIndex = Math.floor(Math.random() * pool.length);
+                    sentenceParts.push(pool[randomIndex]);
+                }
+            });
+
+            if (missingCategories.length > 0) {
+                playSystemSound('error');
+                showToast(`エラー: ${missingCategories.join(", ")} が空っぽです。`, "error");
+                return;
+            }
+
+            const result = sentenceParts.join("");
+            generatedSentenceText = result;
+
+            const resultTextElement = document.getElementById("resultText");
+            resultTextElement.innerText = result;
+
+            const favIcon = document.getElementById("favHeartIcon");
+            favIcon.className = "fa-regular fa-heart";
+
+            document.getElementById("resultActions").style.opacity = "1";
+
+            playSystemSound('generate');
+
+            resultTextElement.classList.add("scale-105", "text-pink-300");
+            setTimeout(() => {
+                resultTextElement.classList.remove("scale-105", "text-pink-300");
+            }, 300);
+        }
+
+        // --- クリップボードコピー ---
+        function copyResult() {
+            if (!generatedSentenceText) return;
+            copyStringToClipboard(generatedSentenceText);
+            showToast("クリップボードにコピーしました！", "success");
+        }
+
+        // 汎用クリップボードコピー関数 (iframe動作制限対応)
+        function copyStringToClipboard(str) {
+            const el = document.createElement('textarea');
+            el.value = str;
+            document.body.appendChild(el);
+            el.select();
+            document.execCommand('copy');
+            document.body.removeChild(el);
+        }
+
+        // --- お気に入り保存 ---
+        function saveToFavorites() {
+            if (!generatedSentenceText) return;
+
+            if (favorites.includes(generatedSentenceText)) {
+                playSystemSound('error');
+                showToast("既にお気に入りに保存されています", "warning");
+                return;
+            }
+
+            favorites.unshift(generatedSentenceText);
+            
+            saveAllData();
+
+            playSystemSound('favorite');
+
+            const favIcon = document.getElementById("favHeartIcon");
+            favIcon.className = "fa-solid fa-heart text-rose-500 animate-ping-once";
+
+            renderFavorites();
+            showToast("お気に入りに保存しました！", "success");
+        }
+
+        function renderFavorites() {
+            const container = document.getElementById("favoritesList");
+            container.innerHTML = "";
+
+            if (favorites.length === 0) {
+                container.innerHTML = `<p class="text-xs text-slate-400 text-center py-4">お気に入りの文章はまだありません。生成して右下のハートマークを押そう！</p>`;
+                return;
+            }
+
+            favorites.forEach((fav, index) => {
+                const item = document.createElement("div");
+                item.className = "p-3 bg-slate-50 border border-slate-100 hover:border-slate-200 rounded-xl text-xs text-slate-700 flex flex-col justify-between gap-2 group transition-all";
+                item.innerHTML = `
+                    <p class="font-medium leading-relaxed">${fav}</p>
+                    <div class="flex justify-end items-center gap-2">
+                        <button onclick="speakText('${fav.replace(/'/g, "\\'")}')" class="text-slate-400 hover:text-indigo-600 transition-all" title="読み上げ">
+                            <i class="fa-solid fa-volume-high"></i>
+                        </button>
+                        <button onclick="copySpecificText('${fav.replace(/'/g, "\\'")}')" class="text-slate-400 hover:text-indigo-600 transition-all" title="コピー">
+                            <i class="fa-regular fa-copy"></i>
+                        </button>
+                        <button onclick="deleteFavorite(${index}); playSystemSound('error');" class="text-slate-400 hover:text-red-500 transition-all" title="削除">
+                            <i class="fa-solid fa-trash-can"></i>
+                        </button>
+                    </div>
+                `;
+                container.appendChild(item);
+            });
+        }
+
+        function deleteFavorite(index) {
+            favorites.splice(index, 1);
+            
+            saveAllData();
+            renderFavorites();
+            showToast("お気に入りから削除しました", "success");
+        }
+
+        function confirmClearFavorites() {
+            playSystemSound('click');
+            document.getElementById("clearFavsConfirmArea").classList.remove("hidden");
+        }
+
+        function cancelClearFavorites() {
+            document.getElementById("clearFavsConfirmArea").classList.add("hidden");
+        }
+
+        function clearFavorites() {
+            playSystemSound('error');
+            document.getElementById("clearFavsConfirmArea").classList.add("hidden");
+            favorites = [];
+            saveAllData();
+            renderFavorites();
+            showToast("お気に入りをすべて消去しました", "info");
+        }
+
+        function copySpecificText(text) {
+            playSystemSound('click');
+            copyStringToClipboard(text);
+            showToast("コピーしました！", "success");
+        }
+
+        // --- 音声読み上げ ---
+        function speakSentence() {
+            if (!generatedSentenceText) {
+                playSystemSound('error');
+                showToast("まずは文章を生成してください", "warning");
+                return;
+            }
+            speakText(generatedSentenceText);
+        }
+
+        function speakText(text) {
+            if ('speechSynthesis' in window) {
+                playSystemSound('click');
+                window.speechSynthesis.cancel();
+
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.lang = 'ja-JP';
+                utterance.rate = 1.0;
+                utterance.pitch = 1.1;
+
+                const speakBtn = document.getElementById("speakBtn");
+                if (speakBtn) speakBtn.classList.add("animate-pulse", "text-pink-400");
+
+                utterance.onend = function() {
+                    if (speakBtn) speakBtn.classList.remove("animate-pulse", "text-pink-400");
+                };
+
+                window.speechSynthesis.speak(utterance);
+            } else {
+                playSystemSound('error');
+                showToast("お使いのブラウザは音声読み上げに対応していません", "error");
+            }
+        }
+
+        // --- ヘルプモーダルの開閉制御 ---
+        function openHelpModal() {
+            const modal = document.getElementById("helpModal");
+            modal.classList.remove("hidden");
+            setTimeout(() => {
+                modal.classList.remove("opacity-0");
+                modal.querySelector("div").classList.remove("scale-95");
+                modal.querySelector("div").classList.add("scale-100");
+            }, 10);
+        }
+
+        // ヘルプモーダル閉じる
+        function closeHelpModal() {
+            const modal = document.getElementById("helpModal");
+            modal.classList.add("opacity-0");
+            modal.querySelector("div").classList.remove("scale-100");
+            modal.querySelector("div").classList.add("scale-95");
+            setTimeout(() => {
+                modal.classList.add("hidden");
+            }, 300);
+        }
+
+        // --- JSONモーダルの開閉・処理制御 ---
+        function openJsonModal() {
+            // 現在のすべてのデータをJSONフォーマットでテキストエリアに書き出す
+            const exportData = {
+                currentPool: currentPool,
+                customCategories: customCategories,
+                sequence: sequence
+            };
+            
+            document.getElementById("jsonTextArea").value = JSON.stringify(exportData, null, 2);
+
+            const modal = document.getElementById("jsonModal");
+            modal.classList.remove("hidden");
+            setTimeout(() => {
+                modal.classList.remove("opacity-0");
+                modal.querySelector("div").classList.remove("scale-95");
+                modal.querySelector("div").classList.add("scale-100");
+            }, 10);
+        }
+
+        function closeJsonModal() {
+            const modal = document.getElementById("jsonModal");
+            modal.classList.add("opacity-0");
+            modal.querySelector("div").classList.remove("scale-100");
+            modal.querySelector("div").classList.add("scale-95");
+            setTimeout(() => {
+                modal.classList.add("hidden");
+            }, 300);
+        }
+
+        // JSON文字列をクリップボードにコピー
+        function copyJsonToClipboard() {
+            playSystemSound('click');
+            const jsonText = document.getElementById("jsonTextArea").value;
+            copyStringToClipboard(jsonText);
+            showToast("JSONデータをクリップボードにコピーしました！", "success");
+        }
+
+        // JSONファイルをローカルPCにダウンロード
+        function downloadJsonFile() {
+            playSystemSound('click');
+            const jsonText = document.getElementById("jsonTextArea").value;
+            try {
+                // 有効なJSONか再チェック
+                JSON.parse(jsonText);
+                
+                const blob = new Blob([jsonText], { type: "application/json" });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `コトバノカオス_辞書バックアップ_${Date.now()}.json`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                showToast("JSONファイルを保存しました！", "success");
+            } catch (e) {
+                playSystemSound('error');
+                showToast("JSONデータが正しくありません。保存できません。", "error");
+            }
+        }
+
+        // ドラッグ＆ドロップおよびファイルインプットのイベント設定
+        function setupDragAndDropArea() {
+            const dropArea = document.getElementById("dragDropArea");
+
+            ['dragenter', 'dragover'].forEach(eventName => {
+                dropArea.addEventListener(eventName, (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    dropArea.classList.add('border-emerald-500', 'bg-emerald-50/50');
+                }, false);
+            });
+
+            ['dragleave', 'drop'].forEach(eventName => {
+                dropArea.addEventListener(eventName, (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    dropArea.classList.remove('border-emerald-500', 'bg-emerald-50/50');
+                }, false);
+            });
+
+            dropArea.addEventListener('drop', (e) => {
+                const dt = e.dataTransfer;
+                const files = dt.files;
+                if (files.length > 0) {
+                    readJsonFile(files[0]);
+                }
+            }, false);
+        }
+
+        // ファイル選択ダイアログ経由の読み込み
+        function handleJsonFileSelect(event) {
+            const files = event.target.files;
+            if (files.length > 0) {
+                readJsonFile(files[0]);
+            }
+        }
+
+        // 実際にファイルをパースする処理
+        function readJsonFile(file) {
+            playSystemSound('click');
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const text = e.target.result;
+                try {
+                    // 簡単な整合性チェック
+                    JSON.parse(text);
+                    document.getElementById("jsonTextArea").value = text;
+                    showToast("ファイルを読み込みました！下部ボタンからインポートを確定してください。", "success");
+                } catch (err) {
+                    playSystemSound('error');
+                    showToast("無効なJSONファイル形式です。", "error");
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        // テキストエリアのJSONを元に、現在のアプリに辞書データを反映する
+        function importJsonFromTextArea() {
+            const jsonText = document.getElementById("jsonTextArea").value.trim();
+            const importMode = document.querySelector('input[name="importMode"]:checked').value;
+
+            if (!jsonText) {
+                playSystemSound('error');
+                showToast("JSONデータが入力されていません", "warning");
+                return;
+            }
+
+            try {
+                const parsedData = JSON.parse(jsonText);
+
+                // 単語辞書(currentPool)が入っているか確認
+                // 互換性チェック: 古い形式や単一の辞書オブジェクトのみの場合でもマッピング可能にする
+                let importedPool = {};
+                let importedCats = {};
+                let importedSeq = null;
+
+                if (parsedData.currentPool && typeof parsedData.currentPool === 'object') {
+                    // フルバックアップ形式の場合
+                    importedPool = parsedData.currentPool;
+                    importedCats = parsedData.customCategories || {};
+                    importedSeq = parsedData.sequence || null;
+                } else if (typeof parsedData === 'object' && !Array.isArray(parsedData)) {
+                    // 簡易辞書形式（{ conjunction: [...], noun: [...] }）の場合
+                    importedPool = parsedData;
+                } else {
+                    throw new Error("有効な辞書フォーマットではありません。");
+                }
+
+                if (importMode === 'overwrite') {
+                    // 完全置換（上書き）
+                    currentPool = importedPool;
+                    customCategories = importedCats;
+                    if (importedSeq) {
+                        sequence = importedSeq;
+                    } else {
+                        // シーケンスが無い場合はプールの持つキーから動的生成
+                        sequence = Object.keys(importedPool);
+                    }
+                    showToast("データを完全に上書きインポートしました！", "success");
+                } else {
+                    // 追加（マージ）
+                    // 1. カスタムカテゴリメタ情報のマージ
+                    Object.keys(importedCats).forEach(catId => {
+                        if (!customCategories[catId]) {
+                            customCategories[catId] = importedCats[catId];
+                        }
+                    });
+
+                    // 2. 単語プールのマージ
+                    Object.keys(importedPool).forEach(catId => {
+                        if (!currentPool[catId]) {
+                            currentPool[catId] = [];
+                        }
+                        // 重複を排除して結合
+                        const combined = [...currentPool[catId], ...importedPool[catId]];
+                        currentPool[catId] = Array.from(new Set(combined));
+                    });
+
+                    // 3. スロットシーケンス（文章順序）の新規登録分のみ追加
+                    if (importedSeq) {
+                        importedSeq.forEach(catId => {
+                            if (!sequence.includes(catId)) {
+                                sequence.push(catId);
+                            }
+                        });
+                    } else {
+                        // 簡易マージのとき、未登録のカテゴリがあれば末尾に追加
+                        Object.keys(importedPool).forEach(catId => {
+                            if (!sequence.includes(catId)) {
+                                sequence.push(catId);
+                            }
+                        });
+                    }
+                    showToast("データをマージ(追加)インポートしました！", "success");
+                }
+
+                // データの永続化
+                saveAllData();
+                playSystemSound('success');
+
+                // UIのリフレッシュ
+                renderSlots();
+                renderSlotAddButtons();
+                renderTabs();
+                // もしアクティブなカテゴリが消えていたら戻す
+                if (!currentPool[activeCategory]) {
+                    activeCategory = Object.keys(currentPool)[0] || "conjunction";
+                }
+                renderWords();
+
+                // モーダルを閉じる
+                closeJsonModal();
+
+            } catch (e) {
+                playSystemSound('error');
+                showToast(`インポートに失敗しました。構造を確認してください: ${e.message}`, "error");
+                console.error(e);
+            }
+        }
+
+        // --- トースト通知 ---
+        function showToast(message, type = "info") {
+            const toast = document.getElementById("toast");
+            const toastMsg = document.getElementById("toastMessage");
+            const toastIcon = document.getElementById("toastIcon");
+
+            toastMsg.innerText = message;
+            toast.className = "fixed bottom-5 left-1/2 transform -translate-x-1/2 px-4 py-2.5 rounded-full text-xs font-bold shadow-lg transition-all duration-300 z-50 flex items-center gap-2 ";
+            
+            if (type === "success") {
+                toast.classList.add("bg-emerald-600", "text-white");
+                toastIcon.className = "fa-solid fa-circle-check";
+            } else if (type === "warning") {
+                toast.classList.add("bg-amber-500", "text-white");
+                toastIcon.className = "fa-solid fa-triangle-exclamation";
+            } else if (type === "error") {
+                toast.classList.add("bg-rose-600", "text-white");
+                toastIcon.className = "fa-solid fa-circle-xmark";
+            } else {
+                toast.classList.add("bg-slate-800", "text-white");
+                toastIcon.className = "fa-solid fa-circle-info";
+            }
+
+            toast.classList.remove("opacity-0", "translate-y-4", "pointer-events-none");
+            
+            setTimeout(() => {
+                toast.classList.add("opacity-0", "translate-y-4", "pointer-events-none");
+            }, 2500);
+        }
+    </script>
+</body>
+</html>
